@@ -1,0 +1,143 @@
+Option Explicit
+
+''' Name: Получение данных по ОФЗ ЦБ РФ на лист ОФЗ_дюрация
+''' Date create: 01.09.23
+''' Description:
+
+Sub Main_OFZ_reqiest()
+
+Dim arrOFZ As Variant
+Dim dStartTime As Date, dFinishTime As Date, dResultTime As Date
+
+    dStartTime = Time()
+
+    Call Prepare                        'ускорение
+    Call SOAP_request_OFZ(arrOFZ)       'запрос к ЦБ РФ
+    Call WriteToSheet(arrOFZ)           'запись на лист
+    Call Ended                          'замедление
+    
+    dFinishTime = Time()
+    dResultTime = dFinishTime - dStartTime 'время работы макроса
+    
+    MsgBox ("Готово" & Chr(13) & "Время начала: " & dStartTime & Chr(13) & "Время окончания: " & dFinishTime & Chr(13) & "Продолжительность работы: " & dResultTime)
+End Sub
+
+
+'Процедура выполнения запроса к ЦБ РФ
+'принимает пустой массив
+Sub SOAP_request_OFZ(arrOFZ As Variant)
+
+Dim sEnv$, sURL$
+Dim sDateStart$, sDateFinish$
+Dim xmlHTTP  As Object, xmlDOMDoc As Object, xmlNodeList As Object, xmlNode As Object
+Dim iDateDiff&, iCountDate&
+Dim i&, x&
+    
+    Set xmlHTTP = CreateObject("MSXML2.xmlHTTP")
+    Set xmlDOMDoc = CreateObject("MSXML2.DOMDocument")
+    
+    'период сбора данных по ОФЗ
+    With ThisWorkbook.Sheets("ОФЗ_дюрация")
+        sDateStart = Format(.Cells(3, 24), "yyyy-mm-dd")
+        sDateFinish = Format(.Cells(3, 25), "yyyy-mm-dd")
+    End With
+
+    'размерность для объявление массива
+    iDateDiff = DateDiff("d", CDate(sDateStart), CDate(sDateFinish)) + 2
+    
+    'массив для итоговых данных
+    ReDim arrOFZ(1 To iDateDiff, 1 To 13)   'кол-во строк = кол-во дней между датами, кол-во столбцов = 13 ОФЗ + 1 толбец для дат
+    
+    '
+    sURL = "http://www.cbr.ru/secinfo/secinfo.asmx"
+    
+    'собираем строку с запросом
+    sEnv = "<?xml version=""1.0"" encoding=""utf-8""?>"
+    sEnv = sEnv & "<soap:Envelope "
+    sEnv = sEnv & "xmlns:xsi=" & Chr(34) & "http://www.w3.org/2001/XMLSchema-instance" & Chr(34) & " "
+    sEnv = sEnv & "xmlns:xsd=" & Chr(34) & "http://www.w3.org/2001/XMLSchema" & Chr(34) & " "
+    sEnv = sEnv & "xmlns:soap=" & Chr(34) & "http://schemas.xmlsoap.org/soap/envelope/" & Chr(34) & ">"
+    sEnv = sEnv & "<soap:Body>"
+    sEnv = sEnv & "<zcyc_paramsXML xmlns=" & Chr(34) & "http://web.cbr.ru/" & Chr(34) & ">"
+    sEnv = sEnv & "<OnDate>" & sDateStart & "</OnDate>"
+    sEnv = sEnv & "<ToDate>" & sDateFinish & "</ToDate>"
+    sEnv = sEnv & "</zcyc_paramsXML>"
+    sEnv = sEnv & "</soap:Body>"
+    sEnv = sEnv & "</soap:Envelope>"
+    
+    
+    With xmlHTTP
+        'формируем запрос
+        .Open "POST", sURL, False
+        .setRequestHeader "Host", "www.cbr.ru"
+        .setRequestHeader "Content-Type", "text/xml; charset=utf-8"
+        .setRequestHeader "Content-Length", Len(sEnv)
+        .setRequestHeader "SOAPAction", "http://web.cbr.ru/zcyc_paramsXML"
+         
+        'отправляем запрос
+        .Send sEnv
+    
+        'ThisWorkbook.Sheets(1).Cells(2, 1) = .responseText     'debug
+        Set xmlDOMDoc = .responseXML
+        Set xmlNodeList = xmlDOMDoc.SelectNodes("//ZCYC")
+        
+        iCountDate = 0
+        'проходим по всем нодам
+        For i = xmlNodeList.Length - 1 To 0 Step -1     'step-1 - даты по возрастанию
+            iCountDate = iCountDate + 1
+            Set xmlNode = xmlNodeList.Item(i)
+            'нода с датой
+            arrOFZ(iCountDate, 1) = CDate(Split(xmlNode.ChildNodes.Item(0).Text, "T")(0))   'отбрасываем время после T, форматируем как дату и записываем в массив
+            For x = 1 To xmlNode.ChildNodes.Length - 1  'дочерние ноды
+                'нода со значением ОФЗ
+                arrOFZ(iCountDate, x + 1) = CDec(Replace(xmlNode.ChildNodes.Item(x).Text, ".", ","))
+                'нода с дюрацией
+                'arrOFZ(1, x + 1) = Replace(xmlNode.ChildNodes.Item(x).nodeName, "v_", "")
+                'arrOFZ(1, x + 1) = CDec(Replace(arrOFZ(1, x + 1), "_", ","))
+            Next x
+        Next i
+    End With
+    
+End Sub
+
+
+'Процедура запись на лист
+'принимает массив с данными по ОФЗ
+Sub WriteToSheet(arrOFZ As Variant)
+
+Dim wsOFZ As Worksheet
+Dim i&, x&, z&, iLR&, iStartRowData&
+
+    iStartRowData = 5
+    
+    Set wsOFZ = ThisWorkbook.Worksheets("ОФЗ_дюрация")
+    
+    With wsOFZ
+    
+        'очищаем форматы и предыдущие значения
+        iLR = .Cells(.Rows.Count, 10).End(xlUp).Row
+        If iLR > iStartRowData Then 'без заголовков
+            .Range(.Cells(iStartRowData, 10), .Cells(iLR, 22)).ClearContents
+            .Range(.Cells(iStartRowData + 1, 10), .Cells(iLR, 22)).ClearFormats
+        End If
+        
+        'вставляем массив на лист
+        .Cells(iStartRowData, 10).Resize(UBound(arrOFZ, 1), UBound(arrOFZ, 2)) = arrOFZ
+        
+        'распрорстраняем форматирование из верхней строки на вставленные данные
+        iLR = .Cells(.Rows.Count, 10).End(xlUp).Row
+        .Range(.Cells(iStartRowData, 10), .Cells(iStartRowData, 22)).Copy
+        If iLR > iStartRowData Then
+            .Range(.Cells(iStartRowData + 1, 10), .Cells(iLR, 22)).PasteSpecial Paste:=xlPasteFormats
+        End If
+        Application.CutCopyMode = False
+        
+        'вставляем формулу для расчета средних значений
+        For i = 11 To 22
+            .Cells(iStartRowData - 1, i).FormulaR1C1 = "=ROUND(AVERAGE(R[1]C:R[" & iLR - 4 & "]C),2)"
+        Next i
+        
+    End With
+
+
+End Sub
