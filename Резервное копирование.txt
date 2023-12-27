@@ -1,0 +1,53 @@
+Option Explicit
+
+''' Name: Резервное копирование файлов средствами VBA
+''' Date create:
+''' Description:
+'''
+
+Sub Save_copy()
+
+Dim sFile_name$, sNewFile_name$, sFile_ext$, sFullPath$
+Dim sBackupDir$, sBackupDir_Year$, sBackupDir_Month$, sBackupDir_Date$
+Dim oFSO As Object
+
+    sBackupDir = ThisWorkbook.Path                                                                           'путь для сохранения
+
+    Set oFSO = CreateObject("Scripting.FileSystemObject")
+    
+    'текущий файл
+    With ThisWorkbook
+        sFile_name = Left(.Name, InStr(1, .Name, ".") - 1)                                                   'имя файла
+        sFile_ext = oFSO.GetExtensionName(.Name)                                                             'расширение файла
+        'sFile_ext = Right(ThisWorkbook.Name, Len(ThisWorkbook.Name) - InStr(1, ThisWorkbook.Name, ".") + 1) 'расширение файла
+    End With
+
+
+   
+    sBackupDir_Year = sBackupDir & "\" & Year(Date)                                                          'путь бэкапа - год
+    sBackupDir_Month = sBackupDir_Year & "\" & MonthName(Month(Date))                                        'путь бэкапа - год - месяц
+    sBackupDir_Date = sBackupDir_Month & "\" & Date                                                          'путь бэкапа - год - месяц - дата
+    sNewFile_name = sFile_name & " " & Replace(Format(Date, "ddMMyy"), ".", "") & "." & sFile_ext            'новое название файла включающее текущую дату
+    sFullPath = sBackupDir_Date & "\" & sNewFile_name                                                        'полный путь с датой и название файла
+    
+    With oFSO
+        If Not .folderexists(sBackupDir_Year) Then      'нет папки с годом
+            .createfolder (sBackupDir_Year)
+            .createfolder (sBackupDir_Month)
+            .createfolder (sBackupDir_Date)
+        ElseIf Not .folderexists(sBackupDir_Month) Then 'нет папки с месяцем
+            .createfolder (sBackupDir_Month)
+            .createfolder (sBackupDir_Date)
+        ElseIf Not .folderexists(sBackupDir_Date) Then  'нет папки с датой
+            .createfolder (sBackupDir_Date)
+        End If
+        
+        If Not .fileexists(sFullPath) Then              'файла нет - сохраним
+            ThisWorkbook.SaveCopyAs sFullPath
+        Else                                            'файл уже есть - удалим и сохраним
+            oFSO.deletefile sFullPath, True
+            ThisWorkbook.SaveCopyAs sFullPath
+        End If
+    End With
+    
+End Sub
