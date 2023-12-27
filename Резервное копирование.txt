@@ -2,7 +2,7 @@ Option Explicit
 
 ''' Name: Резервное копирование файлов средствами VBA
 ''' Date create:
-''' Description:
+''' Description: указанному пути с бэкапами создаеются подпапки формама: год-месяц-дата-название файла с текущей датой и временем
 '''
 
 Sub Save_copy()
@@ -11,7 +11,7 @@ Dim sFile_name$, sNewFile_name$, sFile_ext$, sFullPath$
 Dim sBackupDir$, sBackupDir_Year$, sBackupDir_Month$, sBackupDir_Date$
 Dim oFSO As Object
 
-    sBackupDir = ThisWorkbook.Path                                                                           'путь для сохранения
+    sBackupDir = ThisWorkbook.Path                                                                           'путь для бэкапов
 
     Set oFSO = CreateObject("Scripting.FileSystemObject")
     
@@ -27,7 +27,10 @@ Dim oFSO As Object
     sBackupDir_Year = sBackupDir & "\" & Year(Date)                                                          'путь бэкапа - год
     sBackupDir_Month = sBackupDir_Year & "\" & MonthName(Month(Date))                                        'путь бэкапа - год - месяц
     sBackupDir_Date = sBackupDir_Month & "\" & Date                                                          'путь бэкапа - год - месяц - дата
-    sNewFile_name = sFile_name & " " & Replace(Format(Date, "ddMMyy"), ".", "") & "." & sFile_ext            'новое название файла включающее текущую дату
+    sNewFile_name = sFile_name & " " & _
+                    Format(Date, "ddMMyy") & "_" & _
+                    Format(Time, "hhmm") & "." & _
+                    sFile_ext                                                                                'новое название файла включающее текущую дату и время
     sFullPath = sBackupDir_Date & "\" & sNewFile_name                                                        'полный путь с датой и название файла
     
     With oFSO
